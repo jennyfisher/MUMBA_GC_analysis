@@ -132,7 +132,7 @@ def mumba_gc_ts(varname,cat=None,lon=None,lat=None,
 
     plt.show()
 
-    return dfg1d
+    return
 
 def gc_map(varname,cat=None,lon=None,lat=None,lev=0,
                 alldates=False,daterange=None,
@@ -148,37 +148,63 @@ def gc_map(varname,cat=None,lon=None,lat=None,lev=0,
     if lon == None:
         lon = [145,155]
 
-    # Pick GC filename - only one run for map
+    # Pick GC filename - one run for map or two for difference plot
+    sims=[]
     if ( sim == None):
        sim = 'base'
-    if type(sim) == list:
-       if len(sim) > 1:
-          print('Can only map one run! Using '+sim[0])
-       sim = sim[0]
+    if type(sim) is str:
+       sims.append(sim)
+    else:
+       for s in sim:
+           sims.append(s)
 
-    # Read dataframe
-    gc_directory, filename = get_dir_and_file_names(sim,'map',daterange=daterange)
-    dfg = read_gc(filename,varname,gc_dir=gc_directory,cat=cat)
+    if len(sim) == 1:
+       print("Plotting map from run "+sim[0])
+    elif len(sim) == 2:
+       print("Plotting difference map: "+sim[1]+"-"+sim[0])
+    else:
+       raise RuntimeError("Only one or two runs allowed for maps")
 
-    # Conversion from ppbC to ppbv for some species
-    conv = get_unit_conversion(dfg, varname)
+    for i,s in enumerate(sims):
 
-    # Average over time
-    dfg = dfg.mean('time')
+        # Read dataframe
+        gc_directory, filename = get_dir_and_file_names(s,'map',daterange=daterange)
+        dfg = read_gc(filename,varname,gc_dir=gc_directory,cat=cat)
+    
+        # Conversion from ppbC to ppbv for some species
+        conv = get_unit_conversion(dfg, varname)
+    
+        # Average over time
+        dfg = dfg.mean('time')
+    
+        # Cut to requested level(s) and average over levels if needed
+        try:
+            dfg = dfg.isel(lev=lev).mean('lev')
+        except :
+            dfg = dfg.isel(lev=lev)
+    
+        # Extract data
+        gclon = dfg.lon.values
+        gclat = dfg.lat.values
+        gcdata = dfg['IJ_AVG_S_'+varname].values
+    
+        # Convert units from ppbC to ppbv for some species
+        gcdata = gcdata / conv
 
-    # Cut to requested level(s) and average over levels if needed
-    try:
-        dfg = dfg.isel(lev=lev).mean('lev')
-    except :
-        dfg = dfg.isel(lev=lev)
+        # Save into separate array if first run
+        if i == 0:
+           gcdata_orig = gcdata
 
-    # Extract data
-    gclon = dfg.lon.values
-    gclat = dfg.lat.values
-    gcdata = dfg['IJ_AVG_S_'+varname].values
-
-    # Convert units from ppbC to ppbv for some species
-    gcdata = gcdata / conv
+    # If there are two sims we need to take the difference
+    if len(sims) == 2:
+       gcdata = gcdata - gcdata_orig
+       cmap = 'coolwarm'
+       if maxdata is None:
+          maxdata = np.max(abs(gcdata))
+       mindata = -1.*maxdata
+    else:
+       cmap = 'viridis'
+       mindata = 0.
 
     # Temperature? Convert units to C
     if varname == 'TMPU':
@@ -188,17 +214,17 @@ def gc_map(varname,cat=None,lon=None,lat=None,lev=0,
     # Set colorbar range?
     if maxdata is not None:
        im = ax.pcolormesh(gclon, gclat, gcdata.T,
-                          vmin = 0, vmax = maxdata,
-                          cmap=plt.get_cmap('viridis'))
+                          vmin = mindata, vmax = maxdata,
+                          cmap=plt.get_cmap(cmap))
     else:
        im = ax.pcolormesh(gclon, gclat, gcdata.T,
-                          cmap=plt.get_cmap('viridis'))
+                          cmap=plt.get_cmap(cmap))
     cb = fig.colorbar(im, ax=ax, orientation='horizontal')
 
     # Add map features
     ax.coastlines(resolution='50m', color='k',linewidth=1)
     ax.set_extent([lon[0],lon[1],lat[0],lat[1]],ccrs.PlateCarree())
-    ocean = cfeature.NaturalEarthFeature('physical','ocean','50m',edgecolor='face',facecolor=cfeature.COLORS['water'])
+    ocean = cfeature.NaturalEarthFeature('physical','ocean','50m',edgecolor='k',facecolor=cfeature.COLORS['water'])
     ax.add_feature(ocean)
 
     # Add title
