@@ -136,7 +136,7 @@ def mumba_gc_ts(varname,cat=None,lon=None,lat=None,
 
 def gc_map(varname,cat=None,lon=None,lat=None,lev=0,
                 alldates=False,daterange=None,
-                maxdata=None,sim=None,shift=None):
+                maxdata=None,sim=None):
 
     # Set up figure & map projection
     fig = plt.figure()
