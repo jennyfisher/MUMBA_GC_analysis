@@ -48,8 +48,8 @@ def read_gc(fname,varname,cat='IJ-AVG-$',
 
     # If needed, sum GEOS-Chem variables
     if len(varname_gc) > 1:
-        dfg = sum_gc_vars(dfg, ['IJ_AVG_S_'+v for v in varname_gc],
-                                varname='IJ_AVG_S_'+varname)
+        dfg = sum_gc_vars(dfg, [cat+'_'+v for v in varname_gc],
+                                varname=cat+'_'+varname)
 
     return dfg
 
