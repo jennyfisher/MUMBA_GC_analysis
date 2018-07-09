@@ -7,6 +7,8 @@ Created on Tue May 16 2018
 
 import xarray as xr
 import pandas as pd
+import numpy as np
+import datetime as dt
 from xbpch import open_bpchdataset
 from xbpch import open_mfbpchdataset
 from glob import glob
@@ -87,7 +89,7 @@ def get_unit_conversion(df, varname, cat):
        print("no C value found")
 
     if conv != 1.0:
-       print("dividing by {} to convert from ppbC to ppbv".format(conv))
+       print("dividing "+varname+" by {} to convert from ppbC to ppbv".format(conv))
 
     return conv
 
@@ -131,4 +133,45 @@ def gcname_to_names(argument):
         "SOA"     : ["SOAS","SOAIE","SOAME","SOAGX","SOAMG","LVOCOA","ISN1OA","IONITA","MONITA"],
     }
     return switcher.get(argument.upper(), [origname,])
+
+def extract_gc_ts(filename,varname,gc_dir,cat='IJ-AVG-$',
+                  lat=-34.297200,lon=150.899600):
+
+        if 'R_' in varname:
+           varname = varname.split('_')[1:]
+        else:
+           varname = [varname,]
+
+        for v in varname:
+            # Print some info to screen & read data
+            print("Reading GEOS-Chem variable "+v)
+            dfg = read_gc(filename,v,gc_dir=gc_dir,cat=cat)
+            dfg1d = dfg.sel(lat=lat,lon=lon,method='nearest')
+    
+            # MUMBA time = UTC+10
+            gctime = pd.to_datetime(dfg1d.time.values) + dt.timedelta(hours=10)
+            gcdata = xr.Dataset.to_array(dfg1d).values
+    
+            # Convert from ppbC to ppbv for some species and reshape array
+            conv = get_unit_conversion(dfg, v, cat)
+            gcdata = np.reshape(gcdata,gcdata.shape[1]) / conv
+    
+            # Get units
+            gcunit = dfg[cat.replace('$','S').replace('-','_')+'_'+v].units
+    
+            # Convert to pandas dataframe
+            gcdata = pd.DataFrame(gcdata,index=gctime)
+
+            # Save first time
+            if v == varname[0]:
+               gcdata_save = gcdata
+               gcunit_save = gcunit
+            # Ratio second time
+            else:
+               gcdata = gcdata_save / gcdata
+               if gcunit != gcunit_save:
+                  print("Warning: units don't match: "+gcunit+" vs. "+gcunit_save)
+                  print(" Using units "+gcunit+" from variable "+v)
+
+        return gcdata, gcunit
 

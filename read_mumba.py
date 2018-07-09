@@ -11,6 +11,18 @@ import datetime
 
 def read_mumba(varname):
 
+    if 'R_' in varname:
+       var = varname.split('_')[1:]
+       df  = read_mumba_var(var[0])
+       df1 = read_mumba_var(var[1])
+       df[varname] = df[gcname_to_mumbaname(var[0])]/df1[gcname_to_mumbaname(var[1])]
+    else:
+       df  = read_mumba_var(varname)
+
+    return df
+
+def read_mumba_var(varname):
+
     # MUMBA directory
     mumba_dir = '/short/m19/jaf574/data/MUMBA/'
 
@@ -27,9 +39,6 @@ def read_mumba(varname):
     # Read using pandas
     df = pd.read_csv(mumba_dir+fname,sep='\t',header=n_hdr,
                      index_col=[0],parse_dates=True)
-
-    # Fix date/time column
-    #df['Date/Time'] = pd.to_datetime(df['Date/Time'])
 
     # Replace missing value with NaN
     df = df.resample('60min').mean()

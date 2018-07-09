@@ -18,9 +18,9 @@ from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 from read_mumba import *
 from read_gc import *
 
-def mumba_gc_ts(varname,cat='IJ-AVG-$',lon=None,lat=None,
-                alldates=False,daterange=None,
-                mindata=None,maxdata=None,sim=None,shift=None,
+def mumba_gc_ts(varname,cat='IJ-AVG-$',lon=150.899600,lat=-34.397200,
+                sim='base',alldates=False,daterange=None,
+                mindata=None,maxdata=None,shift=None,
                 MUMBA=True, diurnal=False):
 
     # Set up figure
@@ -51,12 +51,6 @@ def mumba_gc_ts(varname,cat='IJ-AVG-$',lon=None,lat=None,
                 ax.plot(dfm.index,dfm[gcname_to_mumbaname(varname)],
                         color='k',linewidth=2,label='Obs')
     
-    # Pick lat and lon - if not specified use MUMBA values
-    if lat == None:
-        lat = -34.397200
-    if lon == None:
-        lon = 150.899600
-
     # Shift gridbox by one?
     if shift is not None:
         if 'W' in shift.upper():
@@ -70,8 +64,6 @@ def mumba_gc_ts(varname,cat='IJ-AVG-$',lon=None,lat=None,
 
     # Pick GC filename - allow overplotting multiple runs
     sims=[]
-    if ( sim == None):
-       sim = 'base'
     if type(sim) is str:
        sims.append(sim)
     else:
@@ -81,27 +73,13 @@ def mumba_gc_ts(varname,cat='IJ-AVG-$',lon=None,lat=None,
     for s in sims:
         # Read dataframe
         gc_directory, filename = get_dir_and_file_names(s,'ts',daterange=daterange)
-        dfg = read_gc(filename,varname,gc_dir=gc_directory,cat=cat)
-        dfg1d = dfg.sel(lat=lat,lon=lon,method='nearest')
-
-        # Plot timeseries - MUMBA time = UTC+10
-        gctime = pd.to_datetime(dfg1d.time.values) + dt.timedelta(hours=10)
-        gcdata = xr.Dataset.to_array(dfg1d).values
-
-        # Convert from ppbC to ppbv for some species and reshape array
-        conv = get_unit_conversion(dfg, varname, cat)
-        gcdata = np.reshape(gcdata,gcdata.shape[1]) / conv
-
-        # Get units
-        gcunit = dfg[cat.replace('$','S').replace('-','_')+'_'+varname].units
+        gcdata, gcunit = extract_gc_ts(filename,varname,gc_dir=gc_directory,
+                                       cat=cat,lat=lat,lon=lon)
 
         # Temperature? Convert units to C
         if varname == 'TMPU':
            gcdata = gcdata - 273.15
            gcunit = 'C'
-
-        # Convert to pandas dataframe
-        gcdata = pd.DataFrame(gcdata,index=gctime)
 
         # For diurnal cycle, calculate hourly averages
         if diurnal:
