@@ -11,17 +11,9 @@ from xbpch import open_bpchdataset
 from xbpch import open_mfbpchdataset
 from glob import glob
 
-def read_gc(fname,varname,gc_dir=None,cat=None,**kwargs):
-
-    # Default GEOS-Chem directory
-    if gc_dir is None:
-       gc_dir = '/short/m19/jaf574/GC.v11-01/runs.v11-02e/geosfp_025x03125_tropchem_au.base/'
-
-    # Default category
-    if cat is None:
-       cat='IJ-AVG-$'
-    cats=cat.replace('$','S')
-    cats=cats.replace('-','_')
+def read_gc(fname,varname,cat='IJ-AVG-$',
+            gc_dir = '/short/m19/jaf574/GC.v11-01/runs.v11-02e/geosfp_025x03125_tropchem_au.base/',
+            **kwargs):
 
     # Some species involve multiple GEOS-Chem species...
     varname_gc = gcname_to_names(varname)
@@ -51,7 +43,8 @@ def read_gc(fname,varname,gc_dir=None,cat=None,**kwargs):
     ds.load()
 
     # extract variables
-    dfg = ds[[cats+'_'+v for v in varname_gc]]
+    cat=cat.replace('$','S').replace('-','_')
+    dfg = ds[[cat+'_'+v for v in varname_gc]]
 
     # If needed, sum GEOS-Chem variables
     if len(varname_gc) > 1:
@@ -84,15 +77,17 @@ def get_dir_and_file_names(sim, plot_type, daterange=None):
 
     return gc_dir, filename
 
-def get_unit_conversion(df, varname):
+def get_unit_conversion(df, varname, cat):
 
     # Conversion from ppbC to ppbv for some species
     try :
-       conv = df['IJ_AVG_S_'+varname].C
-       print("dividing by {} to convert from ppbC to ppbv".format(conv))
+       conv = df[cat.replace('$','S').replace('-','_')+'_'+varname].C
     except AttributeError:
        conv = 1.0 
        print("no C value found")
+
+    if conv != 1.0:
+       print("dividing by {} to convert from ppbC to ppbv".format(conv))
 
     return conv
 

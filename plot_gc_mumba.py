@@ -7,17 +7,18 @@ Created on Tue May 16 2018
 
 import pandas as pd
 import numpy  as np
+import datetime as dt
+import gc
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
-import datetime as dt
-import gc
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 
 from read_mumba import *
 from read_gc import *
 
-def mumba_gc_ts(varname,cat=None,lon=None,lat=None,
+def mumba_gc_ts(varname,cat='IJ-AVG-$',lon=None,lat=None,
                 alldates=False,daterange=None,
                 mindata=None,maxdata=None,sim=None,shift=None,
                 MUMBA=True, diurnal=False):
@@ -88,12 +89,16 @@ def mumba_gc_ts(varname,cat=None,lon=None,lat=None,
         gcdata = xr.Dataset.to_array(dfg1d).values
 
         # Convert from ppbC to ppbv for some species and reshape array
-        conv = get_unit_conversion(dfg, varname)
+        conv = get_unit_conversion(dfg, varname, cat)
         gcdata = np.reshape(gcdata,gcdata.shape[1]) / conv
+
+        # Get units
+        gcunit = dfg[cat.replace('$','S').replace('-','_')+'_'+varname].units
 
         # Temperature? Convert units to C
         if varname == 'TMPU':
            gcdata = gcdata - 273.15
+           gcunit = 'C'
 
         # Convert to pandas dataframe
         gcdata = pd.DataFrame(gcdata,index=gctime)
@@ -111,7 +116,7 @@ def mumba_gc_ts(varname,cat=None,lon=None,lat=None,
 
     # Add plot parameters
     ax.legend(loc='best')
-    plt.ylabel(varname.upper())
+    plt.ylabel(varname.upper()+', '+gcunit)
 
     # Plot all dates or just GC time frame?
     if not diurnal:
@@ -134,7 +139,7 @@ def mumba_gc_ts(varname,cat=None,lon=None,lat=None,
 
     return
 
-def gc_map(varname,cat=None,lon=None,lat=None,lev=0,
+def gc_map(varname,cat='IJ-AVG-$',lon=None,lat=None,lev=0,
                 alldates=False,daterange=None,
                 maxdata=None,sim=None):
 
@@ -172,21 +177,24 @@ def gc_map(varname,cat=None,lon=None,lat=None,lev=0,
         dfg = read_gc(filename,varname,gc_dir=gc_directory,cat=cat)
     
         # Conversion from ppbC to ppbv for some species
-        conv = get_unit_conversion(dfg, varname)
+        conv = get_unit_conversion(dfg, varname, cat)
     
-        # Average over time
-        dfg = dfg.mean('time')
+        # Average over time (if more than one time)
+        if 'time' in dfg.dims:
+            dfg = dfg.mean('time')
     
         # Cut to requested level(s) and average over levels if needed
-        try:
-            dfg = dfg.isel(lev=lev).mean('lev')
-        except :
-            dfg = dfg.isel(lev=lev)
+        if 'lev' in dfg.dims:
+            try:
+                dfg = dfg.isel(lev=lev).mean('lev')
+            except :
+                dfg = dfg.isel(lev=lev)
     
         # Extract data
         gclon = dfg.lon.values
         gclat = dfg.lat.values
-        gcdata = dfg['IJ_AVG_S_'+varname].values
+        gcunit = dfg[cat.replace('$','S').replace('-','_')+'_'+varname].units
+        gcdata = dfg[cat.replace('$','S').replace('-','_')+'_'+varname].values
     
         # Convert units from ppbC to ppbv for some species
         gcdata = gcdata / conv
@@ -209,6 +217,7 @@ def gc_map(varname,cat=None,lon=None,lat=None,lev=0,
     # Temperature? Convert units to C
     if varname == 'TMPU':
        gcdata = gcdata - 273.15
+       gcunit = 'C'
 
     # Make map here - must transpose data for correct shape
     # Set colorbar range?
@@ -219,13 +228,18 @@ def gc_map(varname,cat=None,lon=None,lat=None,lev=0,
     else:
        im = ax.pcolormesh(gclon, gclat, gcdata.T,
                           cmap=plt.get_cmap(cmap))
-    cb = fig.colorbar(im, ax=ax, orientation='horizontal')
+    cb = fig.colorbar(im, ax=ax, orientation='horizontal',label=gcunit)
 
     # Add map features
     ax.coastlines(resolution='50m', color='k',linewidth=1)
     ax.set_extent([lon[0],lon[1],lat[0],lat[1]],ccrs.PlateCarree())
     ocean = cfeature.NaturalEarthFeature('physical','ocean','50m',edgecolor='k',facecolor=cfeature.COLORS['water'])
     ax.add_feature(ocean)
+    gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True)
+    gl.xlabels_top = False
+    gl.ylabels_right = False
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
 
     # Add title
     if daterange is None:
